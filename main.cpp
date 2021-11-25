@@ -18,7 +18,41 @@ public:
         x = ms->pt.x;
         y = ms->pt.y;
         event = evt;
-        delta = ms->mouseData;
+
+
+        delta = (short)HIWORD(ms->mouseData);
+    }
+
+    DWORD translateEvent()
+    {
+        if (event == WM_MOUSEMOVE) return MOUSEEVENTF_MOVE;
+        if (event == WM_LBUTTONDOWN) return MOUSEEVENTF_LEFTDOWN;
+        if (event == WM_LBUTTONUP) return MOUSEEVENTF_LEFTUP;
+        if (event == WM_RBUTTONDOWN) return MOUSEEVENTF_RIGHTDOWN;
+        if (event == WM_RBUTTONUP) return MOUSEEVENTF_RIGHTUP;
+        if (event == WM_MOUSEWHEEL) return MOUSEEVENTF_WHEEL;
+        if (event == WM_MOUSEHWHEEL) return MOUSEEVENTF_HWHEEL;
+    }
+
+    void replicate()
+    {
+        high_resolution_clock::time_point start = high_resolution_clock::now();
+
+        INPUT input;
+        memset(&input, 0, sizeof(input));
+        input.type = INPUT_MOUSE;
+        input.mi.mouseData = delta;
+        input.mi.dx = x * (65536 / GetSystemMetrics(SM_CXSCREEN));
+        input.mi.dy = y * (65536 / GetSystemMetrics(SM_CYSCREEN));
+
+        input.mi.dwFlags = translateEvent() | MOUSEEVENTF_ABSOLUTE;
+
+        auto delay = microseconds(relative_delay) - (high_resolution_clock::now() - start);
+
+        if (delay.count() > 0)
+            std::this_thread::sleep_for(delay);
+
+        SendInput(1, &input, sizeof(input));
     }
 
     int x = 0;
@@ -84,7 +118,7 @@ int main()
 
 
     std::atomic<bool> iHaveToWork = true;
-                                                                          
+
     //setup hooks
     auto keybd_hook = kb_hook_ll::getIST()->init();
     auto mouse_hook = ms_hook_ll::getIST()->init();
@@ -139,6 +173,16 @@ int main()
             }
         );
     }
+
+
+    msrec.Foreach(
+        [&](mouse_record& s) -> void
+        {
+            printf("aboba\n");
+            s.replicate();
+        }
+    );
+
 
     //serialize and dump to file
     {

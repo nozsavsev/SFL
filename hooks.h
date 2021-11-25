@@ -89,7 +89,8 @@ void VectorEx <T>::Rem_If(std::function <bool(T)> fnc)
 template <class T>
 void VectorEx <T>::Foreach(std::function <void(T&)> fnc)
 {
-    std::for_each(this->begin(), this->end(), fnc);
+    if (this->size() > 0)
+        std::for_each(this->begin(), this->end(), fnc);
 }
 template <class T>
 void VectorEx <T>::Sort(std::function <bool(T, T)> fnc)
