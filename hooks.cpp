@@ -5,6 +5,8 @@ void ms_hook_ll::hook_main()
     HHOOK hook_handle = SetWindowsHookExW(WH_MOUSE_LL, ms_hook_ll::LowLevelMouseProc, NULL, NULL);
     MSG msg;
 
+    printf("ms -> OK!\n");
+
     while (GetMessageW(&msg, NULL, NULL, NULL))
     {
         TranslateMessage(&msg);
@@ -31,7 +33,10 @@ LRESULT CALLBACK ms_hook_ll::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM 
 ms_hook_ll::~ms_hook_ll()
 {
     if (hook_main_thread)
+    {
         delete hook_main_thread;
+        hook_main_thread = nullptr;
+    }      
 }
 
 ms_hook_ll* ms_hook_ll::getIST()
@@ -41,7 +46,8 @@ ms_hook_ll* ms_hook_ll::getIST()
 
 ms_hook_ll* ms_hook_ll::init()
 {
-    hook_main_thread = new std::thread(&hook_main);
+    if (!hook_main_thread)
+        hook_main_thread = new std::thread(&hook_main);
     return ist;
 }
 
@@ -75,6 +81,8 @@ void kb_hook_ll::hook_main()
     HHOOK hook_handle = SetWindowsHookExW(WH_KEYBOARD_LL, kb_hook_ll::LowLevelKeyboardProc, NULL, NULL);
     MSG msg;
 
+    printf("kb -> OK!\n");
+
     while (GetMessageW(&msg, NULL, NULL, NULL))
     {
         TranslateMessage(&msg);
@@ -105,13 +113,19 @@ kb_hook_ll* kb_hook_ll::getIST()
 
 kb_hook_ll::~kb_hook_ll()
 {
+
+
     if (hook_main_thread)
+    {
         delete hook_main_thread;
+        hook_main_thread = nullptr;
+    }
 }
 
 kb_hook_ll* kb_hook_ll::init()
 {
-    hook_main_thread = new std::thread(&hook_main);
+    if (!hook_main_thread)
+        hook_main_thread = new std::thread(&hook_main);
     return ist;
 
 }

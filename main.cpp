@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <fstream> 
 
 using namespace std;
 using namespace std::chrono;
@@ -18,40 +19,6 @@ public:
         y = ms->pt.y;
         event = evt;
         delta = ms->mouseData;
-    }
-
-    string Event()
-    {
-        switch (event)
-        {
-        case   WM_LBUTTONDOWN: return "LBUTTONDOWN"; break;
-        case   WM_LBUTTONUP:   return "LBUTTONUP";   break;
-        case   WM_MOUSEMOVE:   return "MOUSEMOVE";   break;
-        case   WM_MOUSEWHEEL:  return "MOUSEWHEEL";  break;
-        case   WM_MOUSEHWHEEL: return "MOUSEHWHEEL"; break;
-        case   WM_RBUTTONDOWN: return "RBUTTONDOWN"; break;
-        case   WM_RBUTTONUP:   return "RBUTTONUP";   break;
-        default:               return  "";           break;
-        }
-    }
-
-    void Event(string str)
-    {
-        if (str == "LBUTTONDOWN") event = WM_LBUTTONDOWN;
-        if (str == "LBUTTONUP") event = WM_LBUTTONUP;
-        if (str == "MOUSEMOVE") event = WM_MOUSEMOVE;
-        if (str == "MOUSEWHEEL") event = WM_MOUSEWHEEL;
-        if (str == "MOUSEHWHEEL") event = WM_MOUSEHWHEEL;
-        if (str == "RBUTTONDOWN") event = WM_RBUTTONDOWN;
-        if (str == "RBUTTONUP") event = WM_RBUTTONUP;
-    }
-
-    string toString()
-    {
-        ostringstream stringStream;
-        stringStream << x << ":" << y << " " << Event();
-
-        return stringStream.str();
     }
 
     int x = 0;
@@ -80,76 +47,34 @@ void from_json(const nlohmann::json& j, mouse_record& p)
     p.y = j["y"];
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 class keybd_record
 {
 public:
     keybd_record() = default;
     keybd_record(KBDLLHOOKSTRUCT* kb, WPARAM evt)
     {
-
         keyCode = kb->vkCode;
-        kb.
-
+        event = evt;
     }
 
     int keyCode = 0;
-
-    string Event()
-    {
-
-
-    }
-
-    void Event(string str)
-    {
-
-
-    }
-
-    string toString()
-    {
-
-
-    }
-
-
+    WPARAM event = 0;
 
     high_resolution_clock::time_point time = high_resolution_clock::now();
     size_t relative_delay = 0;
 };
 void to_json(nlohmann::json& j, const keybd_record& p)
 {
-
-
+    j["keyCode"] = p.keyCode;
+    j["event"] = p.event;
+    j["relative_delay"] = p.relative_delay;
 }
-
 void from_json(const nlohmann::json& j, keybd_record& p)
 {
-
-
+    p.keyCode = j["keyCode"];
+    p.event = j["event"];
+    p.relative_delay = j["relative_delay"];
 }
-
-
-
-
-
-
-
-
-
-
 
 int main()
 {
@@ -159,28 +84,40 @@ int main()
 
 
     std::atomic<bool> iHaveToWork = true;
-
-    auto keyboard_hook = kb_hook_ll::getIST()->init();
+                                                                          
+    //setup hooks
+    auto keybd_hook = kb_hook_ll::getIST()->init();
     auto mouse_hook = ms_hook_ll::getIST()->init();
 
-    auto  kbhookID = keyboard_hook->Add_Callback([&](KBDLLHOOKSTRUCT* kb, WPARAM evt) -> bool {
+    //add callbacks
+    auto  kbhookID = keybd_hook->Add_Callback(
+        [&](KBDLLHOOKSTRUCT* kb, WPARAM evt) -> bool
+        {
+            if (kb->vkCode == VK_INSERT)
+                return !(iHaveToWork = false);
 
-        if (kb->vkCode == VK_INSERT)
-            return !(iHaveToWork = false);
+            kbrec.push_back({ kb, evt });
 
-
-
-
-        return !iHaveToWork;
-        });
-
-    auto  mshookID = mouse_hook->Add_Callback([&](MSLLHOOKSTRUCT* ms, WPARAM evt) -> bool {
-        msrec.push_back({ ms, evt });
-        return false;
+            return false;
         });
 
 
-    while (iHaveToWork);
+    //add callbacks
+    auto  mshookID = mouse_hook->Add_Callback(
+        [&](MSLLHOOKSTRUCT* ms, WPARAM evt) -> bool
+        {
+            msrec.push_back({ ms, evt });
+            return false;
+        });
+
+    while (iHaveToWork)
+        Sleep(1);
+
+    //clear callbacks();
+    {
+        keybd_hook->Remove_Callback(kbhookID);
+        mouse_hook->Remove_Callback(mshookID);
+    }
 
     //fill relative delays                             
     {
@@ -192,16 +129,28 @@ int main()
                 last = s.time;
             }
         );
+
+        kbrec.Foreach(
+            [&](keybd_record& s) -> void
+            {
+                static auto last = msrec[0].time;
+                s.relative_delay = duration_cast<microseconds>(s.time - last).count();
+                last = s.time;
+            }
+        );
     }
 
-    nlohmann::json out_json;
-
-    out_json["ms_actions"] = msrec;
-    out_json["kb_actions"] = kbrec;
-
-
-    //std::this_thread::sleep_for(microseconds(s.relative_delay));
-
+    //serialize and dump to file
+    {
+        nlohmann::json out_json;
+        out_json["ms_actions"] = msrec;
+        out_json["kb_actions"] = kbrec;
+        fstream out_file;
+        out_file.open("rec.sfl", fstream::out);
+        auto fstr = out_json.dump();
+        out_file.write(fstr.c_str(), fstr.size());
+        out_file.close();
+    }
 
     Sleep(100);
     return 0;
